@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flappy Cyber — HTML Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #070b14; color: #fff; font-family: system-ui, -apple-system, sans-serif; overflow: hidden; user-select: none; }
+    .wrap { height: 100%; display: flex; align-items: center; justify-content: center; padding: 12px; }
+    .card { position: relative; width: min(94vw, 440px); height: min(88vh, 620px); border-radius: 18px; overflow: hidden; border: 2px solid rgba(56,189,248,0.35); background: #0b1528; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+    canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+    .hud { position: absolute; top: 14px; inset-x: 16px; display: flex; justify-content: space-between; pointer-events: none; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+    .score { font-size: 30px; color: #fff; }
+    .best { font-size: 13px; background: rgba(0,0,0,0.45); padding: 6px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); align-self: flex-start; }
+    .overlay { position: absolute; inset: 0; background: rgba(7,11,20,0.72); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 24px; }
+    .overlay.hidden { display: none; }
+    .overlay h1 { font-size: 26px; color: #38bdf8; }
+    .overlay p { font-size: 13px; color: #cbd5e1; max-width: 260px; line-height: 1.45; }
+    button { background: #0ea5e9; color: #fff; border: none; border-radius: 12px; padding: 10px 22px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    button:hover { background: #38bdf8; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <canvas id="c" width="440" height="620"></canvas>
+      <div class="hud">
+        <div class="score" id="scoreEl">0</div>
+        <div class="best">Best: <span id="bestEl">0</span></div>
+      </div>
+      <div class="overlay" id="ov">
+        <h1 id="ovTitle">Flappy Cyber</h1>
+        <p id="ovMsg">Tap, click, or press Space / Up Arrow to boost through the neon skyline gates.</p>
+        <button id="playBtn">Launch Flight</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const c = document.getElementById('c');
+    const ctx = c.getContext('2d');
+    const scoreEl = document.getElementById('scoreEl');
+    const bestEl = document.getElementById('bestEl');
+    const ov = document.getElementById('ov');
+    const ovTitle = document.getElementById('ovTitle');
+    const ovMsg = document.getElementById('ovMsg');
+    const playBtn = document.getElementById('playBtn');
+
+    let best = Number(localStorage.getItem('html_flappy_best') || '0');
+    bestEl.textContent = best;
+
+    let bird = { x: 110, y: 280, vy: 0, r: 15 };
+    let pipes = [];
+    let stars = Array.from({ length: 42 }, () => ({ x: Math.random() * 440, y: Math.random() * 480, s: Math.random() * 2 + 1 }));
+    let score = 0;
+    let state = 'ready';
+    let lastTs = performance.now();
+    let spawnTimer = 0;
+
+    function reset() {
+      bird = { x: 110, y: 270, vy: -310, r: 15 };
+      pipes = [];
+      score = 0;
+      spawnTimer = 0.7;
+      scoreEl.textContent = '0';
+      state = 'play';
+      ov.classList.add('hidden');
+    }
+
+    function flap() {
+      if (state === 'ready' || state === 'over') {
+        reset();
+        return;
+      }
+      bird.vy = -360;
+    }
+
+    function spawnPipe() {
+      const gap = Math.max(126, 158 - Math.min(30, score));
+      const minY = 90;
+      const maxY = 470 - gap;
+      const topH = minY + Math.random() * (maxY - minY);
+      pipes.push({ x: c.width + 20, w: 62, topH, gap, passed: false });
+    }
+
+    function update(dt) {
+      stars.forEach(st => {
+        st.x -= 24 * dt;
+        if (st.x < 0) st.x = c.width;
+      });
+
+      if (state !== 'play') return;
+
+      bird.vy += 1080 * dt;
+      bird.y += bird.vy * dt;
+
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) {
+        spawnPipe();
+        spawnTimer = 1.48;
+      }
+
+      const speed = 175 + Math.min(90, score * 2.5);
+      for (let i = pipes.length - 1; i >= 0; i--) {
+        const p = pipes[i];
+        p.x -= speed * dt;
+        if (!p.passed && p.x + p.w < bird.x) {
+          p.passed = true;
+          score++;
+          scoreEl.textContent = String(score);
+          if (score > best) {
+            best = score;
+            bestEl.textContent = String(best);
+            localStorage.setItem('html_flappy_best', String(best));
+          }
+        }
+        if (bird.x + bird.r - 3 > p.x && bird.x - bird.r + 3 < p.x + p.w) {
+          if (bird.y - bird.r + 3 < p.topH || bird.y + bird.r - 3 > p.topH + p.gap) {
+            endGame();
+          }
+        }
+        if (p.x + p.w < -20) pipes.splice(i, 1);
+      }
+
+      if (bird.y + bird.r > c.height - 40 || bird.y - bird.r < 0) {
+        endGame();
+      }
+    }
+
+    function endGame() {
+      state = 'over';
+      ovTitle.textContent = 'Crashed!';
+      ovMsg.textContent = `Score: ${score} · Best: ${best}`;
+      playBtn.textContent = 'Fly Again';
+      ov.classList.remove('hidden');
+    }
+
+    function draw() {
+      const grad = ctx.createLinearGradient(0, 0, 0, c.height);
+      grad.addColorStop(0, '#091124');
+      grad.addColorStop(1, '#122244');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, c.width, c.height);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      stars.forEach(s => ctx.fillRect(s.x, s.y, s.s, s.s));
+
+      // Pipes
+      pipes.forEach(p => {
+        ctx.fillStyle = '#0ea5e9';
+        ctx.fillRect(p.x, 0, p.w, p.topH);
+        ctx.fillRect(p.x, p.topH + p.gap, p.w, c.height - 40 - (p.topH + p.gap));
+        ctx.fillStyle = '#7dd3fc';
+        ctx.fillRect(p.x - 4, p.topH - 16, p.w + 8, 16);
+        ctx.fillRect(p.x - 4, p.topH + p.gap, p.w + 8, 16);
+      });
+
+      // Ground
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, c.height - 40, c.width, 40);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(0, c.height - 40, c.width, 3);
+
+      // Bird
+      ctx.save();
+      ctx.translate(bird.x, bird.y);
+      ctx.rotate(Math.max(-0.5, Math.min(1.0, bird.vy / 480)));
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath(); ctx.arc(0, 0, bird.r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath(); ctx.moveTo(10, -2); ctx.lineTo(22, 3); ctx.lineTo(10, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(5, -5, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath(); ctx.arc(7, -5, 2.3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    function frame(now) {
+      const dt = Math.min(0.04, (now - lastTs) / 1000);
+      lastTs = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    c.addEventListener('pointerdown', flap);
+    playBtn.addEventListener('click', reset);
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+        e.preventDefault();
+        flap();
+      }
+    });
+
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

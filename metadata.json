@@ -1,0 +1,8 @@
+{
+  "name": "AuroraOS Arcade",
+  "description": "A macOS-style glassmorphic gaming desktop with built-in Brave browser, full SoundCloud player, YouTube, and 9 arcade games.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
